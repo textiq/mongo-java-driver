@@ -235,8 +235,9 @@ public class JsonReader extends AbstractBsonReader {
                     setCurrentBsonType(BsonType.DECIMAL128);
                     currentValue = visitNumberDecimalConstructor();
                 } else if ("ObjectId".equals(value)) {
-                    setCurrentBsonType(BsonType.OBJECT_ID);
-                    currentValue = visitObjectIdConstructor();
+                    ParsedObjectId poi = visitObjectIdConstructor();
+                    setCurrentBsonType(poi.getType());
+                    currentValue = poi.getObject();
                 } else if ("Timestamp".equals(value)) {
                     setCurrentBsonType(BsonType.TIMESTAMP);
                     currentValue = visitTimestampConstructor();
@@ -588,8 +589,9 @@ public class JsonReader extends AbstractBsonReader {
             currentValue = visitNumberDecimalConstructor();
             setCurrentBsonType(BsonType.DECIMAL128);
         } else if ("ObjectId".equals(value)) {
-            currentValue = visitObjectIdConstructor();
-            setCurrentBsonType(BsonType.OBJECT_ID);
+            ParsedObjectId poi = visitObjectIdConstructor();
+            setCurrentBsonType(poi.getType());
+            currentValue = poi.getObject();
         } else if ("RegExp".equals(value)) {
             currentValue = visitRegularExpressionConstructor();
             setCurrentBsonType(BsonType.REGULAR_EXPRESSION);
@@ -744,11 +746,39 @@ public class JsonReader extends AbstractBsonReader {
         return new BsonRegularExpression(pattern, options);
     }
 
-    private ObjectId visitObjectIdConstructor() {
-        verifyToken(JsonTokenType.LEFT_PAREN);
-        ObjectId objectId = new ObjectId(readStringFromExtendedJson());
-        verifyToken(JsonTokenType.RIGHT_PAREN);
-        return objectId;
+    private static class ParsedObjectId {
+        final BsonType type;
+        final Object object;
+
+        static ParsedObjectId of(BsonType type, Object object) {
+            return new ParsedObjectId(type, object);
+        }
+        private ParsedObjectId(BsonType type, Object object) {
+            this.type = type;
+            this.object = object;
+        }
+
+        public BsonType getType() {
+            return type;
+        }
+
+        public Object getObject() {
+            return object;
+        }
+    }
+
+    private ParsedObjectId visitObjectIdConstructor() {
+        verifyToken("(");
+        JsonToken valueToken = popToken();
+        if (valueToken.getType() != JsonTokenType.STRING) {
+            throw new JsonParseException("JSON reader expected a string but found '%s'.", valueToken.getValue());
+        }
+        verifyToken(")");
+        try {
+            return ParsedObjectId.of(BsonType.OBJECT_ID, new ObjectId(valueToken.getValue(String.class)));
+        } catch(IllegalArgumentException iae) {
+            return ParsedObjectId.of(BsonType.STRING, valueToken.getValue(String.class));
+        }
     }
 
     private BsonTimestamp visitTimestampConstructor() {
