@@ -111,7 +111,13 @@ To build and test the driver:
 ```
 $ git clone https://github.com/mongodb/mongo-java-driver.git
 $ cd mongo-java-driver
-$ ./gradlew check
+$ ./gradlew check 
+```
+
+If prefer making build only and skip the test, do:
+
+```
+./gradlew check -x codenarcTest -x test
 ```
 
 The test suite requires mongod to be running with [`enableTestCommands`](http://docs.mongodb.org/manual/reference/parameters/#param.enableTestCommands).

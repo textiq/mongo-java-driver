@@ -767,21 +767,65 @@ public class Mongo {
     }
 
     <T> T execute(final ReadOperation<T> operation, final ReadPreference readPreference) {
-        ReadBinding binding = getReadBinding(readPreference);
+        final ReadBinding binding = getReadBinding(readPreference);
         try {
-            return operation.execute(binding);
+            return doRetryWithExponentialBackoff(new BasicCallback<T>() {
+                @Override
+                public T execute() {
+                    return operation.execute(binding);
+                }
+            });
         } finally {
             binding.release();
         }
     }
 
     <T> T execute(final WriteOperation<T> operation) {
-        WriteBinding binding = getWriteBinding();
+        final WriteBinding binding = getWriteBinding();
         try {
-            return operation.execute(binding);
+            return doRetryWithExponentialBackoff(new BasicCallback<T>() {
+                @Override
+                public T execute() {
+                    return operation.execute(binding);
+                }
+            });
         } finally {
             binding.release();
         }
+    }
+
+    <T> T doRetryWithExponentialBackoff(final BasicCallback<T> mainAttempt) {
+        int failure = 0;
+        int maxFailure = 6;
+        while (true) {
+            try {
+                return mainAttempt.execute();
+            } catch (RuntimeException mainException) {
+                try {
+                    failure += 1;
+                    if (failure <= maxFailure) {
+                        mainException.printStackTrace();
+                        System.err.println("Delayed due to above Exception");
+                        Thread.sleep(((int) Math.pow(2, failure)) * 1000);
+                    } else {
+                        throw mainException;
+                    }
+                } catch (InterruptedException interruptedException) {
+                    throw new RuntimeException(interruptedException);
+                }
+            }
+        }
+    }
+
+    /**
+     * Basic Callback function.
+     */
+    public interface BasicCallback<T> {
+        /**
+         * The main Callback function, with return value.
+         * @return The result from the main Callback.
+         */
+        T execute();
     }
 
     private ExecutorService createCursorCleaningService() {
