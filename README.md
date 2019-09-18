@@ -106,7 +106,9 @@ For binaries containing the asynchronous API, see the [driver-async README](driv
 
 ## Build
 
-To build and test the driver:
+To build and test the driver, you need gradle 4.x. Do not use the newest version
+
+And run:
 
 ```
 $ git clone https://github.com/mongodb/mongo-java-driver.git
