@@ -801,6 +801,11 @@ public class Mongo {
             try {
                 return mainAttempt.execute();
             } catch (RuntimeException mainException) {
+                // Certain Exception are expected and are handled at our side. Throw.
+                if (mainException instanceof MongoCommandException) {
+                    throw mainException;
+                }
+                // Other non-expected Exception
                 try {
                     failure += 1;
                     if (failure <= maxFailure) {
