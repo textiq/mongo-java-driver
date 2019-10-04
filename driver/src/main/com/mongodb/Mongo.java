@@ -51,6 +51,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.NoSuchElementException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ConcurrentMap;
@@ -802,7 +803,8 @@ public class Mongo {
                 return mainAttempt.execute();
             } catch (RuntimeException mainException) {
                 // Certain Exception are expected and are handled at our side. Throw.
-                if (mainException instanceof MongoCommandException) {
+                if (mainException instanceof MongoCommandException
+                    || mainException instanceof NoSuchElementException) {
                     throw mainException;
                 }
                 // Other non-expected Exception
