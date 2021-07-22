@@ -746,14 +746,15 @@ public class JsonReader extends AbstractBsonReader {
         return new BsonRegularExpression(pattern, options);
     }
 
-    private static class ParsedObjectId {
-        final BsonType type;
-        final Object object;
+    private static final class ParsedObjectId {
+        private final BsonType type;
+        private final Object object;
 
-        static ParsedObjectId of(BsonType type, Object object) {
+        static ParsedObjectId of(final BsonType type, final Object object) {
             return new ParsedObjectId(type, object);
         }
-        private ParsedObjectId(BsonType type, Object object) {
+
+        private ParsedObjectId(final BsonType type, final Object object) {
             this.type = type;
             this.object = object;
         }
@@ -768,15 +769,15 @@ public class JsonReader extends AbstractBsonReader {
     }
 
     private ParsedObjectId visitObjectIdConstructor() {
-        verifyToken("(");
+        verifyToken(JsonTokenType.LEFT_PAREN);
         JsonToken valueToken = popToken();
         if (valueToken.getType() != JsonTokenType.STRING) {
             throw new JsonParseException("JSON reader expected a string but found '%s'.", valueToken.getValue());
         }
-        verifyToken(")");
+        verifyToken(JsonTokenType.RIGHT_PAREN);
         try {
             return ParsedObjectId.of(BsonType.OBJECT_ID, new ObjectId(valueToken.getValue(String.class)));
-        } catch(IllegalArgumentException iae) {
+        } catch (IllegalArgumentException iae) {
             return ParsedObjectId.of(BsonType.STRING, valueToken.getValue(String.class));
         }
     }

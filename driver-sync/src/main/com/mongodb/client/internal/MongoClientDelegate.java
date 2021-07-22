@@ -18,6 +18,7 @@ package com.mongodb.client.internal;
 
 import com.mongodb.ClientSessionOptions;
 import com.mongodb.MongoClientException;
+import com.mongodb.MongoCommandException;
 import com.mongodb.MongoCredential;
 import com.mongodb.MongoException;
 import com.mongodb.MongoInternalException;
@@ -44,6 +45,7 @@ import com.mongodb.lang.Nullable;
 import com.mongodb.operation.ReadOperation;
 import com.mongodb.operation.WriteOperation;
 import com.mongodb.selector.ServerSelector;
+import java.util.NoSuchElementException;
 import org.bson.codecs.configuration.CodecRegistry;
 
 import java.util.ArrayList;
@@ -184,14 +186,19 @@ public class MongoClientDelegate {
         public <T> T execute(final ReadOperation<T> operation, final ReadPreference readPreference, final ReadConcern readConcern,
                              @Nullable final ClientSession session) {
             ClientSession actualClientSession = getClientSession(session);
-            ReadBinding binding = getReadBinding(readPreference, readConcern, actualClientSession,
+            final ReadBinding binding = getReadBinding(readPreference, readConcern, actualClientSession,
                     session == null && actualClientSession != null);
 
             try {
                 if (session != null && session.hasActiveTransaction() && !binding.getReadPreference().equals(primary())) {
                     throw new MongoClientException("Read preference in a transaction must be primary");
                 }
-                return operation.execute(binding);
+                return doRetryWithExponentialBackoff(new BasicCallback<T>() {
+                    @Override
+                    public T execute() {
+                        return operation.execute(binding);
+                    }
+                });
             } catch (MongoException e) {
                 labelException(session, e);
                 unpinServerAddressOnTransientTransactionError(session, e);
@@ -204,11 +211,16 @@ public class MongoClientDelegate {
         @Override
         public <T> T execute(final WriteOperation<T> operation, final ReadConcern readConcern, @Nullable final ClientSession session) {
             ClientSession actualClientSession = getClientSession(session);
-            WriteBinding binding = getWriteBinding(readConcern, actualClientSession,
+            final WriteBinding binding = getWriteBinding(readConcern, actualClientSession,
                     session == null && actualClientSession != null);
 
             try {
-                return operation.execute(binding);
+                return doRetryWithExponentialBackoff(new BasicCallback<T>() {
+                    @Override
+                    public T execute() {
+                        return operation.execute(binding);
+                    }
+                });
             } catch (MongoException e) {
                 labelException(session, e);
                 unpinServerAddressOnTransientTransactionError(session, e);
@@ -284,5 +296,45 @@ public class MongoClientDelegate {
             }
             return session;
         }
+    }
+
+    <T> T doRetryWithExponentialBackoff(final BasicCallback<T> mainAttempt) {
+        int failure = 0;
+        int maxFailure = 6;
+        while (true) {
+            try {
+                return mainAttempt.execute();
+            } catch (RuntimeException mainException) {
+                // Certain Exception are expected and are handled at our side. Throw.
+                if (mainException instanceof MongoCommandException
+                    || mainException instanceof NoSuchElementException) {
+                    throw mainException;
+                }
+                // Other non-expected Exception
+                try {
+                    failure += 1;
+                    if (failure <= maxFailure) {
+                        mainException.printStackTrace();
+                        System.err.println("Delayed due to above Exception");
+                        Thread.sleep(((int) Math.pow(2, failure)) * 1000);
+                    } else {
+                        throw mainException;
+                    }
+                } catch (InterruptedException interruptedException) {
+                    throw new RuntimeException(interruptedException);
+                }
+            }
+        }
+    }
+
+    /**
+     * Basic Callback function.
+     */
+    public interface BasicCallback<T> {
+        /**
+         * The main Callback function, with return value.
+         * @return The result from the main Callback.
+         */
+        T execute();
     }
 }
