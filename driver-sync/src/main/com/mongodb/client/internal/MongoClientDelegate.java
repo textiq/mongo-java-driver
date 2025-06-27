@@ -300,7 +300,7 @@ public class MongoClientDelegate {
 
     <T> T doRetryWithExponentialBackoff(final BasicCallback<T> mainAttempt) {
         int failure = 0;
-        int maxFailure = 6;
+        int maxFailure = 10;
         while (true) {
             try {
                 return mainAttempt.execute();
